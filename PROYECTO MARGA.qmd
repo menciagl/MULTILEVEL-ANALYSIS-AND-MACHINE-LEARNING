@@ -1,0 +1,205 @@
+---
+title: "PROJECT SURVEY II"
+format: html
+editor: visual
+---
+
+## Cleaning the first dataset
+
+```{r}
+library(haven)
+library(dplyr)
+library(tidyverse)
+```
+
+```{r}
+
+original_data <- read_dta("ZA7575.dta")
+
+head(original_data)
+```
+
+```{r}
+variables_chosen <- c("isocntry",
+  "country", "d8", "d10", "d11", "d25",  
+  "d60", "qa5a", "sd1_4", "sd1_7", "sd1_8", "sd2_5", "sd3", "qc1_4", "qc2_4", "qc2_6", "qc2_7", "qc4_7", "qc4_8", "qc4_9", "qc4_10", "qc6_1", "qc6_2", "qc6_10", "qc6_11", "qc7", "qc9_4", "qc9_5", "qc9_10", "qc9_11", "qc11_6", "qc12_10", "qc12_11", "qc12_12", "qc13_10", "qc13_11", "qc13_12", 
+  "qc15_1", "qc15_2", "qc15_3", "qc17_3", "qc17_4", "qc17_5", "qc18_1", "qc18_2", "qc18_3", "qc19", "qc20"
+)
+
+```
+
+```{r}
+first_clean_data <- original_data |> select(all_of(variables_chosen))
+
+glimpse(first_clean_data)
+
+```
+
+```{r}
+# Identify the missing values in each variable
+
+sapply(first_clean_data, unique)
+
+```
+
+```{r}
+missing_values <- list(
+  d8 = c(98, 99, 0, 1),
+  d11 = 99,
+  d25 = c(4, 8),
+  d60 = c(4, 7),
+  qa5a = c(11, 12, 13),
+  sd1_4 = c(3, 4),
+  sd1_7 = c(3, 4),
+  sd1_8 = c(3, 4),
+  sd3 = c(15, 16),
+  qc1_4 = 6,
+  qc2_4 = 16,
+  qc2_6 = 16,
+  qc2_7 = 16,
+  qc4_7 = c(17, 18),
+  qc4_8 = c(17, 18),
+  qc4_9 = c(17, 18),
+  qc6_1 = 12,
+  qc6_2 = 12,
+  qc6_10 = 12,
+  qc6_11 = 12,
+  qc7 = 12,
+  qc9_4 = c(6, 7),
+  qc9_5 = c(6, 7),
+  qc9_10 = c(6, 7),
+  qc9_11 = c(6, 7),
+  qc11_6 = 5,
+  qc12_10 = c(12, 13),
+  qc12_11 = c(12, 13),
+  qc12_12 = c(12, 13),
+  qc13_10 = c(12, 13),
+  qc13_11 = c(12, 13),
+  qc13_12 = c(12, 13),
+  qc15_1 = 5,
+  qc15_2 = 5,
+  qc15_3 = 5,
+  qc17_3 = 5,
+  qc17_4 = 5,
+  qc17_5 = 5,
+  qc18_1 = c(11, 12),
+  qc18_2 = c(11, 12),
+  qc18_3 = c(11, 12),
+  qc19 = 3,
+  qc20 = 3
+)
+
+# Replace the specific missing values of each variable with NA
+
+for (var in names(missing_values)) {
+  first_clean_data[[var]][first_clean_data[[var]] %in% missing_values[[var]]] <- NA
+}
+```
+
+```{r}
+sapply(first_clean_data, unique)
+```
+
+## Joining rainbow dataset:
+
+ILGA-Europe’s Rainbow Map contains a database that annually ranks European countries based on their laws and policies that provide rights and protections to LGBT. We've chosen to incorporate this data for a study because it gives a comprehensible understanding of the laws each country has for queer people, which can provide insight on their level of acceptance of trans people.
+
+Load rainbow database:
+
+```{r}
+
+rainbow <- read.csv("2024-rainbow-map-data (1).csv")
+
+head(rainbow)
+
+```
+
+Cleaning rainbow:
+
+```{r}
+
+library(tidyr)
+
+# Renombrar las columnas iniciales
+colnames(rainbow)[1:2] <- c("code", "country")
+
+# Usar la primera fila como nombres de columna
+colnames(rainbow) <- rainbow[1, ]
+
+# Eliminar la primera fila que ahora es redundante
+rainbow <- rainbow[-1, ]
+
+# Ver los primeros datos limpios
+head(rainbow)
+
+
+```
+
+Erase row 2 and get back the names of the columns:
+
+```{r}
+
+rainbow <- rainbow[-1, ]
+colnames(rainbow)[1:3] <- c("code", "country", "ranking")
+
+# Reiniciar los índices de fila
+rownames(rainbow) <- NULL
+
+
+head(rainbow)
+
+```
+
+Now we have to select the variables that we're going to use in our study. Rainbow Map ranks the countries differentiating between laws and policies that regard sexual orientation, gender identity, intersexuality and some other more general rights to the whole population (like freedom of expression or association). Because there are so many variables, we've chosen to keep those regarding gender identity, as it's the core of our project.
+
+Selection of variables:
+
+```{r}
+
+rainbow <- rainbow |> 
+  select(1:3, 12:17, 43:44, 51, 53:56, 60, 72)
+
+
+```
+
+Convert to numeric:
+
+```{r}
+
+# Convertir ranking y las demás columnas numéricas
+
+rainbow <- rainbow %>%
+  mutate(
+    ranking = as.numeric(gsub(",", ".", ranking)),  # Reemplazar comas por puntos y convertir a numérico
+    across(-c(code, country, ranking), ~ as.numeric(gsub(",", ".", .x)))  # Hacer lo mismo para todas las demás columnas numéricas
+  )
+
+# Verificar la estructura después de la conversión
+str(rainbow)
+
+
+```
+
+Join with previous dataset:
+
+```{r}
+
+library(dplyr)
+
+# Unir los datasets
+second_clean_data <- first_clean_data %>%
+  left_join(rainbow, by = c("isocntry" = "code"))
+
+second_clean_data <- second_clean_data |> select(-country.x) |> 
+  rename(country = country.y) |> 
+  relocate(country, .after = isocntry)
+  
+# Ver los primeros datos después del join
+head(second_clean_data)
+
+
+```
+
+Now we have each row of individuals from the previous dataset associated with the existence or not of certain laws in their country.
+
+Finally, we have to join our last dataset that we'll be using for the project, from Quality of Government.

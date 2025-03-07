@@ -1,0 +1,556 @@
+---
+title: "PROJECT SURVEY II"
+author: "Alba, Mencía, Julia, Laura"
+date: "2025-02-10"
+output:
+  html_document:
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    df_print: paged
+---
+
+# Join datasets
+
+## Cleaning the first dataset
+
+```{r}
+library(haven)
+library(dplyr)
+library(tidyverse)
+library (tidyr)
+```
+
+```{r}
+
+original_data <- read_dta("ZA7575.dta")
+
+head(original_data)
+```
+
+```{r}
+variables_chosen <- c("isocntry",
+  "country", "d8", "d10", "d11", "d25",  
+  "d60", "sd1_4", "sd1_7", "sd1_8", "sd2_5", "sd3", "qc1_4", "qc2_4", "qc2_6", "qc2_7", "qc4_7", "qc4_8", "qc4_9", "qc4_10", "qc6_1", "qc6_2", "qc6_10", "qc6_11", "qc7", "qc9_4", "qc9_5", "qc9_10", "qc9_11", "qc11_6", "qc12_10", "qc12_11", "qc12_12", "qc13_10", "qc13_11", "qc13_12", 
+  "qc15_1", "qc15_2", "qc15_3", "qc17_3", "qc17_4", "qc17_5", "qc18_1", "qc18_2", "qc18_3", "qc19", "qc20"
+)
+
+```
+
+```{r}
+first_clean_data <- original_data |> select(all_of(variables_chosen))
+
+glimpse(first_clean_data)
+
+```
+
+```{r}
+# Identify the missing values in each variable
+
+sapply(first_clean_data, unique)
+
+```
+
+```{r}
+missing_values <- list(
+  d8 = c(98, 99, 0, 1),
+  d11 = 99,
+  d25 = c(4, 8),
+  d60 = c(4, 7),
+  sd1_4 = c(3, 4),
+  sd1_7 = c(3, 4),
+  sd1_8 = c(3, 4),
+  sd3 = c(15, 16), #14 se puede meter tmb
+  qc1_4 = 6,
+  qc2_4 = 16,
+  qc2_6 = 16,
+  qc2_7 = 16,
+  qc4_7 = c(17, 18),
+  qc4_8 = c(17, 18),
+  qc4_9 = c(17, 18),
+  qc6_1 = 12, 
+  qc6_2 = 12,
+  qc6_10 = 12,
+  qc6_11 = 12,
+  qc7 = 12,
+  qc9_4 = c(6, 7),
+  qc9_5 = c(6, 7),
+  qc9_10 = c(6, 7),
+  qc9_11 = c(6, 7),
+  qc11_6 = 5,
+  qc12_10 = c(12, 13),
+  qc12_11 = c(12, 13),
+  qc12_12 = c(12, 13),
+  qc13_10 = c(12, 13),
+  qc13_11 = c(12, 13),
+  qc13_12 = c(12, 13),
+  qc15_1 = 5,
+  qc15_2 = 5,
+  qc15_3 = 5,
+  qc17_3 = 5,
+  qc17_4 = 5,
+  qc17_5 = 5,
+  qc18_1 = c(11, 12), #aqui dejamos el 11 asi o en 5?
+  qc18_2 = c(11, 12),
+  qc18_3 = c(11, 12),
+  qc19 = 3,
+  qc20 = 3 #PROBLEMA no lo reconoce y lo deja como 3 en lugar de NA
+)
+
+# Replace the specific missing values of each variable with NA
+
+for (var in names(missing_values)) {
+  first_clean_data[[var]][first_clean_data[[var]] %in% missing_values[[var]]] <- NA
+}
+
+# In the questions where the value "11" is indifferent, we include it in point "5" which is the "midpoint" in order to maintain the 1-10 scale.
+
+first_clean_data <- first_clean_data |>
+  mutate(across(c(qc6_1, qc6_2, qc6_10, qc6_11, 
+                  qc12_10, qc12_11, qc12_12, 
+                  qc13_10, qc13_11, qc13_12), 
+                ~ ifelse(. == 11, 5, .)))
+
+```
+
+```{r}
+ sapply(first_clean_data, unique)
+```
+
+
+We join DE-E and DE-W under DE since we want the information for the entire country (Germany)
+
+```{r}
+first_clean_data <- first_clean_data %>%
+  mutate(isocntry = recode(isocntry, "DE-W" = "DE", "DE-E" = "DE"))
+
+unique(first_clean_data$isocntry)
+```
+
+
+## Joining rainbow dataset:
+
+ILGA-Europe’s Rainbow Map contains a database that annually ranks European countries based on their laws and policies that provide rights and protections to LGBT. We've chosen to incorporate this data for a study because it gives a comprehensible understanding of the laws each country has for queer people, which can provide insight on their level of acceptance of trans people.
+
+Load rainbow database:
+
+```{r}
+
+rainbow <- read.csv("2024-rainbow-map-data.csv")
+
+head(rainbow)
+
+```
+
+Cleaning rainbow:
+
+```{r}
+
+library(tidyr)
+
+# Rename columns
+colnames(rainbow)[1:2] <- c("code", "country")
+
+# First row as colnames
+colnames(rainbow) <- rainbow[1, ]
+
+# Delete first row
+rainbow <- rainbow[-1, ]
+
+head(rainbow)
+
+
+```
+
+Erase row 2 and get back the names of the columns:
+
+```{r}
+
+rainbow <- rainbow[-1, ]
+colnames(rainbow)[1:3] <- c("code", "country", "ranking")
+
+# Reiniciar los índices de fila
+rownames(rainbow) <- NULL
+
+
+head(rainbow)
+
+```
+
+Now we have to select the variables that we're going to use in our study. Rainbow Map ranks the countries differentiating between laws and policies that regard sexual orientation, gender identity, intersexuality and some other more general rights to the whole population (like freedom of expression or association). Because there are so many variables, we've chosen to keep those regarding gender identity, as it's the core of our project.
+
+Selection of variables:
+
+```{r}
+
+rainbow <- rainbow |> 
+  select(1:3, 12:17, 43:44, 51, 53:56, 60, 72)
+
+
+```
+
+Convert to numeric:
+
+```{r}
+
+# Convertir ranking y las demás columnas numéricas
+
+rainbow <- rainbow %>%
+  mutate(
+    ranking = as.numeric(gsub(",", ".", ranking)),  # Replace commas with periods and convert to numeric
+    across(-c(code, country, ranking), ~ as.numeric(gsub(",", ".", .x)))
+  )
+
+str(rainbow)
+
+
+```
+
+Join with previous dataset:
+
+```{r}
+
+library(dplyr)
+
+# Unir los datasets
+second_clean_data <- first_clean_data %>%
+  left_join(rainbow, by = c("isocntry" = "code"))
+
+second_clean_data <- second_clean_data |> select(-country.x) |> 
+  rename(country = country.y) |> 
+  relocate(country, .after = isocntry)
+  
+# Ver los primeros datos después del join
+head(second_clean_data)
+
+
+```
+
+Now we have each row of individuals from the previous dataset associated with the existence or not of certain laws in their country.
+
+
+## Joining QoG dataset:
+
+Finally, we have to join our last dataset that we'll be using for the project, from Quality of Government. The Quality of Government (QoG) dataset includes general variables on economic conditions (e.g., female unemployment), the level of democracy, and other socio-political factors. These indicators can influence public attitudes toward transgender rights and acceptance.
+
+Let's load the the standard dataset from Quality of Government.
+
+```{r}
+dataQoG <- read.csv("qog_std_cs_jan25.csv")
+```
+
+Here we are selecting useful variables and changing their names for better understanding.
+
+```{r}
+dataQoG <- dataQoG |> select(cname, ccode, gggi_ggi, eu_unempytotf, eu_unempytotm, dr_sg, ess_relig, wjp_fund_right, wdi_gdpcapcur, sgi_qd)
+dataQoG <- dataQoG |>
+  rename(
+    country_name = cname,
+    country_code = ccode,
+    gender_gap_index = gggi_ggi,
+    eu_unemployment_female = eu_unempytotf,
+    eu_unemployment_male = eu_unempytotm,
+    social_globalisation = dr_sg,
+    religious_importance = ess_relig,
+    fundamental_rights = wjp_fund_right,
+    gdp_per_capita_usd = wdi_gdpcapcur,
+    quality_of_democracy = sgi_qd
+  )
+```
+
+```{r}
+# Left join to keep only countries in second_clean_data
+merged_data <- second_clean_data |>
+  left_join(dataQoG, by = c("country" = "country_name"))
+
+# View the first few rows of the merged dataset
+head(merged_data)
+```
+
+Just to check if we have the same number of countries and their names in both datasets.
+
+```{r}
+length(unique(second_clean_data$country))
+length(unique(merged_data$country))
+unique(second_clean_data$country)
+unique(merged_data$country)
+```
+
+Let's see what country code NA has
+
+```{r}
+merged_data %>% filter(is.na(country)) %>% select(isocntry)
+```
+
+This is West Germany
+
+```{r}
+merged_data <- merged_data %>%
+  mutate(country = ifelse(is.na(country), "Germany", country))
+```
+
+```{r}
+unique(merged_data$country)
+```
+
+!!! IF WE WANT TO SAVE GERMANY DO NOT RUN Another option is to delete
+
+We can see that in 28 countries there is one NA. In the final dataset we will have 27 countries.
+
+```{r}
+# Remove rows where country is NA
+merged_data <- merged_data %>%
+  filter(!is.na(country))
+
+# Check if NA is removed
+sum(is.na(merged_data$country))  # Should return 0
+
+length(unique(merged_data$country))
+```
+
+# Prepare the data: NAs, scales, etc
+
+First, we want to see how many NAs we have:
+
+```{r}
+# NAs
+na_count <- sapply(merged_data, function(x) sum(is.na(x)))
+
+# NAs percentage: is it low or high
+na_percentage <- sapply(merged_data, function(x) mean(is.na(x)) * 100)
+
+na_summary <- data.frame(NA_Count = na_count, NA_Percentage = na_percentage)
+print(na_summary)
+
+
+```
+
+In general we have variables with low levels of NA (generally between 0 and 8%), but there are some exceptions. First, we are surprised that for question QC9 50% are NAs, so we eliminate this variable altogether.
+
+```{r}
+merged_data <- merged_data %>%
+  select(-qc9_4, -qc9_5, -qc9_10, -qc9_11)
+
+```
+
+
+Now we want to impute those variables with more than 8% of NAs.
+
+Since individual and aggregate variables have different distributions or represent different levels of information, it is best to first test which imputation method is best for the individual variables and which for the aggregate variables.
+
+For the individual level we choose the method that best fits the original distribution (between Random Forest, LAsso and Cart):
+
+```{r}
+library(mice)
+library(ggplot2)
+
+selected_vars <- c("qc12_12", "qc6_11")
+
+# Imputation methods
+methods <- c("lasso.norm", "rf", "cart")  
+
+# Apply them
+imputations <- lapply(methods, function(m) {
+  complete(mice(merged_data[selected_vars], m=5, method=m, seed=123))$qc12_12
+})
+
+# Dataframe with original and imputated values
+mice_imputed <- data.frame(
+  original = merged_data$qc6_11,
+  imputed_lasso = imputations[[1]],
+  imputed_rf = imputations[[2]],
+  imputed_cart = imputations[[3]]
+)
+
+# We visualize it in a plot
+variables <- c("original", "imputed_lasso", "imputed_rf", "imputed_cart")
+titles <- c("Original", "LASSO Imputed", "Random Forest Imputed", "CART Imputed")
+colors_fill <- c("skyblue", "#15ad4f", "#6a6ad9", "#e65100")
+
+mice_imputed_long <- mice_imputed %>%
+  pivot_longer(all_of(variables), names_to = "method", values_to = "value")
+
+# Graph
+plots <- ggplot(mice_imputed_long, aes(x = value, fill = method)) +
+  geom_histogram(binwidth = 1, color = "gray30", position = "identity", alpha = 0.6) +
+  facet_wrap(~method, scales = "free_y", labeller = labeller(method = setNames(titles, variables))) +
+  scale_fill_manual(values = colors_fill) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+# Mostrar gráfico
+print(plots)
+
+```
+
+
+Random Forest seems to fit best, so we use that method to impute the individual level variables.
+
+
+And for the variables at the aggregate level: 
+
+```{r}
+selected_vars <- c("religious_importance", "quality_of_democracy")
+
+# Apply imputation
+imputations <- lapply(methods, function(m) {
+  complete(mice(merged_data[selected_vars], m=5, method=m, seed=123))$religious_importance
+})
+
+# Crear dataframe con los valores originales e imputados
+mice_imputed <- data.frame(
+  original = merged_data$religious_importance,
+  imputed_lasso = imputations[[1]],
+  imputed_rf = imputations[[2]],
+  imputed_cart = imputations[[3]]
+)
+
+# Variables para graficar
+variables <- c("original", "imputed_lasso", "imputed_rf", "imputed_cart")
+titles <- c("Original", "LASSO Imputed", "Random Forest Imputed", "CART Imputed")
+colors_fill <- c("skyblue", "#15ad4f", "#6a6ad9", "#e65100")
+
+# Transformar datos a formato largo para ggplot
+mice_imputed_long <- mice_imputed %>%
+  pivot_longer(all_of(variables), names_to = "method", values_to = "value")
+
+# Crear gráfico de distribuciones
+plots <- ggplot(mice_imputed_long, aes(x = value, fill = method)) +
+  geom_histogram(binwidth = 1, color = "gray30", position = "identity", alpha = 0.6) +
+  facet_wrap(~method, scales = "free_y", labeller = labeller(method = setNames(titles, variables))) +
+  scale_fill_manual(values = colors_fill) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+# Mostrar gráfico
+print(plots)
+
+```
+Cart and Random Forest are the closest to the original distribution so we use RF to take the same method as for the individual variables
+
+We apply the imputation to the variables that need it:
+
+((Although our dependent variable has 11% NAs, we are not going to impute it since there is a lot of discussion in the literature about it and for now it is not necessary))
+
+```{r}
+#Variables that we want to impute
+selected_vars <- c("qc6_11", "qc12_12", "qc13_11", "qc13_12", "qc20", 
+                   names(merged_data)[which(names(merged_data) == "gender_gap_index"):
+                                      which(names(merged_data) == "quality_of_democracy")])
+
+# Apply RF
+m <- 4  
+mice_mod <- mice(merged_data[selected_vars], m=m, method='rf', seed=123)
+
+merged_data[selected_vars] <- complete(mice_mod, action=m)
+
+```
+
+# Descriptive analysis
+
+We want to see the distribution of the dependent variable across countries:
+
+```{r}
+table(merged_data$qc19)
+
+#0 for No and 1 for Yes
+merged_data$qc19_label <- factor(merged_data$qc19, levels = c(0, 1), labels = c("No", "Yes"))
+
+qc19_percentages <- merged_data %>%
+  group_by(isocntry, qc19_label) %>%
+  summarise(count = n()) %>%
+  group_by(isocntry) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Crear el gráfico con porcentajes
+ggplot(qc19_percentages, aes(x = factor(isocntry), y = percentage, fill = qc19_label)) +
+  geom_bar(stat = "identity", position = "stack", color = "black") +
+  labs(title = "Distribution of QC10 by country",
+       x = "País (isocntry)",
+       y = "Porcentaje",
+       fill = "qc19") +
+  scale_fill_manual(values = c("No" = "red", "Yes" = "#15ad4f")) + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+```
+
+Hungary is the country that least supports trans people changing their identity on their civil documents, followed by Romania and Bulgaria. The countries that most support the measure are: Spain, the Netherlands and Malta.
+
+# First analysis:  Explaining Cross-Country Differences in Support Levels
+
+## Select relevant variables
+
+Vamos a usar Random Forest para seleccionar las variables más relevantes:
+
+```{r}
+
+library(randomForest)
+
+# Convert qc19 into factor so Random Forest can treat it as a categorical variable
+
+merged_data$qc19 <- factor(merged_data$qc19)
+
+# Usar Random Forest para seleccionar las variables más relevantes
+colnames(merged_data) <- make.names(colnames(merged_data))
+rf_model <- randomForest(qc19 ~ ., data = merged_data, importance = TRUE, na.action = na.omit)
+
+# Ver las variables más importantes
+importance(rf_model)
+
+```
+
+The higher the value of MeanDecreaseAccuracy, the more important the variable is. The higher the value of MeanDecreaseGini, the more useful the variable is for making splits in the trees of the Random Forest model.
+
+The variables that we choose are:
+Individual level: qc6_10, qc6_11, qc12_10, qc12_11, qc12_12, qc18_2, qc17_4, qc17_5
+
+Aggregate level: eu_unemployment_female, eu_unemployment_male, social_globalisation, religious_importance, fundamental_rights, gdp_per_capita, quality_of_democracy, conversion1
+
+## Multilevel regression
+
+Now that we have the most relevant variables we perform our **multilevel regression** with 16 variables:
+
+First we had to check that all variables are in the correct scale or good categorized:
+
+```{r}
+merged_data$qc19 <- as.numeric(as.character(merged_data$qc19))
+
+#Model
+# Escalar las variables seleccionadas (solo las independientes)
+vars_a_escalar <- c("qc6_10", "qc6_11", "qc12_10", "qc12_11", "qc12_12", 
+                    "qc18_2", "qc17_4", "qc17_5", "Conversion.practices.ban..gender.identity.",
+                    "eu_unemployment_female", "eu_unemployment_male", "social_globalisation", 
+                    "religious_importance", "fundamental_rights", "gdp_per_capita_usd", 
+                    "quality_of_democracy")
+
+# Escalar las variables seleccionadas
+merged_data[vars_a_escalar] <- scale(merged_data[vars_a_escalar])
+```
+
+
+```{r}
+#Model
+library(lme4)
+library(nlme)
+library(lmerTest)
+
+
+modelo_multinivel <- lmer(qc19 ~ qc6_10 + qc6_11 + qc12_10 + qc12_11 + qc12_12 + qc18_2 + 
+                          qc17_4 + qc17_5 + Conversion.practices.ban..gender.identity. + 
+                          eu_unemployment_female + eu_unemployment_male + social_globalisation + 
+                          religious_importance + fundamental_rights + gdp_per_capita_usd + 
+                          quality_of_democracy + (1 | isocntry), data = merged_data)
+
+# Summary
+summary(modelo_multinivel)
+
+
+```
+
+
+# Second analysis: Developing a Predictive Model for Other Countries
+
+## 

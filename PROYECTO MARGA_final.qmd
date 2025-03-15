@@ -1,0 +1,917 @@
+---
+title: "PROJECT SURVEY: Gender identity change in civil documents"
+author: "Alba, Mencía, Julia, Laura"
+date: "2025-03-13"
+output:
+  html_document:
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    df_print: paged
+---
+
+# Join datasets
+
+## Cleaning the first dataset
+
+We open the first libraries:
+
+```{r}
+library(haven)
+library(dplyr)
+library(tidyverse)
+library (tidyr)
+```
+
+We load the data of the **Special Eurobarometer (2019)** which contains information on public opinion in European countries regarding various issues, specially LGBT topics.
+
+```{r}
+
+original_data <- read_dta("ZA7575.dta")
+
+head(original_data)
+```
+
+We chose the relevant variables according to the literature: the sociodemographic ones, and those related to LGBT issues.
+
+
+```{r}
+variables_chosen <- c("isocntry",
+  "country", "d8", "d10", "d11", "d25",  
+  "d60", "sd1_4", "sd1_7", "sd1_8", "sd2_5", "sd3", "qc1_4", "qc2_4", "qc2_6", "qc2_7", "qc4_7", "qc4_8", "qc4_9", "qc4_10", "qc6_1", "qc6_2", "qc6_10", "qc6_11", "qc7", "qc9_4", "qc9_5", "qc9_10", "qc9_11", "qc11_6", "qc12_10", "qc12_11", "qc12_12", "qc13_10", "qc13_11", "qc13_12", 
+  "qc15_1", "qc15_2", "qc15_3", "qc17_3", "qc17_4", "qc17_5", "qc18_1", "qc18_2", "qc18_3", "qc19"
+)
+
+```
+
+```{r}
+first_clean_data <- original_data |> select(all_of(variables_chosen))
+
+glimpse(first_clean_data)
+
+```
+
+Now we check missing values, NAs, DK, DA, etc:
+
+
+```{r}
+# Identify the missing values in each variable
+
+sapply(first_clean_data, unique)
+
+```
+
+And we recode them so they appear as NAs:
+
+```{r}
+missing_values <- list(
+  d8 = c(98, 99, 0, 1),
+  d11 = 99,
+  d25 = c(4, 8),
+  d60 = c(4, 7),
+  sd1_4 = c(3, 4),
+  sd1_7 = c(3, 4),
+  sd1_8 = c(3, 4),
+  sd3 = c(15, 16),
+  qc1_4 = 6,
+  qc2_4 = 16,
+  qc2_6 = 16,
+  qc2_7 = 16,
+  qc4_7 = c(17, 18),
+  qc4_8 = c(17, 18),
+  qc4_9 = c(17, 18),
+  qc6_1 = 12, 
+  qc6_2 = 12,
+  qc6_10 = 12,
+  qc6_11 = 12,
+  qc7 = 12,
+  qc9_4 = c(6, 7),
+  qc9_5 = c(6, 7),
+  qc9_10 = c(6, 7),
+  qc9_11 = c(6, 7),
+  qc11_6 = 5,
+  qc12_10 = c(12, 13),
+  qc12_11 = c(12, 13),
+  qc12_12 = c(12, 13),
+  qc13_10 = c(12, 13),
+  qc13_11 = c(12, 13),
+  qc13_12 = c(12, 13),
+  qc15_1 = 5,
+  qc15_2 = 5,
+  qc15_3 = 5,
+  qc17_3 = 5,
+  qc17_4 = 5,
+  qc17_5 = 5,
+  qc18_1 = c(11, 12), 
+  qc18_2 = c(11, 12),
+  qc18_3 = c(11, 12),
+  qc19 = 3
+)
+
+# Replace the specific missing values of each variable with NA
+
+for (var in names(missing_values)) {
+  first_clean_data[[var]][first_clean_data[[var]] %in% missing_values[[var]]] <- NA
+}
+
+# In the questions where the value "11" is indifferent, we include it in point "5" which is the "midpoint" in order to maintain the 1-10 scale.
+
+first_clean_data <- first_clean_data |>
+  mutate(across(c(qc6_1, qc6_2, qc6_10, qc6_11, 
+                  qc12_10, qc12_11, qc12_12, 
+                  qc13_10, qc13_11, qc13_12), 
+                ~ ifelse(. == 11, 5, .)))
+
+```
+
+```{r}
+ sapply(first_clean_data, unique)
+```
+
+In addition, we join DE-E and DE-W under DE since we want the information for the entire country (Germany)
+
+```{r}
+first_clean_data <- first_clean_data %>%
+  mutate(isocntry = recode(isocntry, "DE-W" = "DE", "DE-E" = "DE"))
+
+unique(first_clean_data$isocntry)
+```
+
+
+## Joining rainbow dataset:
+
+**ILGA-Europe’s Rainbow Map** contains a database that annually ranks European countries based on their laws and policies that provide rights and protections to LGBT. We've chosen to incorporate this data for a study because it gives a comprehensible understanding of the laws each country has for queer people, which can provide insight on their level of acceptance of trans people.
+
+Load rainbow database:
+
+```{r}
+
+rainbow <- read.csv("2024-rainbow-map-data.csv")
+
+head(rainbow)
+
+```
+
+Cleaning rainbow:
+
+```{r}
+
+library(tidyr)
+
+# Rename columns
+colnames(rainbow)[1:2] <- c("code", "country")
+
+# First row as colnames
+colnames(rainbow) <- rainbow[1, ]
+
+# Delete first row
+rainbow <- rainbow[-1, ]
+
+head(rainbow)
+
+
+```
+
+Erase row 2 and get back the names of the columns:
+
+```{r}
+
+rainbow <- rainbow[-1, ]
+colnames(rainbow)[1:3] <- c("code", "country", "ranking")
+
+# Reset row indexes
+rownames(rainbow) <- NULL
+
+
+head(rainbow)
+
+```
+
+Now we have to select the variables that we're going to use in our study. Rainbow Map ranks the countries differentiating between laws and policies that regard sexual orientation, gender identity, intersexuality and some other more general rights to the whole population (like freedom of expression or association). Because there are so many variables, we've chosen to keep those regarding gender identity, as it's the core of our project.
+
+Selection of variables:
+
+```{r}
+
+rainbow <- rainbow |> 
+  select(1:3, 12:17, 43:44, 51, 53:56, 60, 72)
+
+```
+
+Convert to numeric:
+
+```{r}
+
+# Convert ranking and other numeric columns
+
+rainbow <- rainbow %>%
+  mutate(
+    ranking = as.numeric(gsub(",", ".", ranking)),  # Replace commas with periods and convert to numeric
+    across(-c(code, country, ranking), ~ as.numeric(gsub(",", ".", .x)))
+  )
+
+str(rainbow)
+
+
+```
+
+Join with previous dataset:
+
+```{r}
+
+library(dplyr)
+
+# Combine the datasets
+second_clean_data <- first_clean_data %>%
+  left_join(rainbow, by = c("isocntry" = "code"))
+
+second_clean_data <- second_clean_data |> select(-country.x) |> 
+  rename(country = country.y) |> 
+  relocate(country, .after = isocntry)
+  
+# See the first data after the join
+head(second_clean_data)
+
+
+```
+
+Now we have each row of individuals from the previous dataset associated with the existence or not of certain laws in their country.
+
+
+## Joining QoG dataset:
+
+Finally, we have to join our last dataset that we'll be using for the project, from **Quality of Government**. The Quality of Government (QoG) dataset includes general variables on economic conditions (e.g., female unemployment), the level of democracy, and other socio-political factors. These indicators can influence public attitudes toward transgender rights and acceptance.
+
+Let's load the the standard dataset from Quality of Government.
+
+```{r}
+dataQoG <- read.csv("qog_std_cs_jan25.csv")
+```
+
+Here we are selecting useful variables and changing their names for better understanding.
+
+```{r}
+dataQoG <- dataQoG |> select(cname, ccode, gggi_ggi, eu_unempytotf, eu_unempytotm, dr_sg, ess_relig, wjp_fund_right, wdi_gdpcapcur, sgi_qd)
+dataQoG <- dataQoG |>
+  rename(
+    country_name = cname,
+    country_code = ccode,
+    gender_gap_index = gggi_ggi,
+    eu_unemployment_female = eu_unempytotf,
+    eu_unemployment_male = eu_unempytotm,
+    social_globalisation = dr_sg,
+    religious_importance = ess_relig,
+    fundamental_rights = wjp_fund_right,
+    gdp_per_capita_usd = wdi_gdpcapcur,
+    quality_of_democracy = sgi_qd
+  )
+```
+
+We join all the datasets: 
+
+```{r}
+# Left join to keep only countries in second_clean_data
+merged_data <- second_clean_data |>
+  left_join(dataQoG, by = c("country" = "country_name"))
+
+# View the first few rows of the merged dataset
+head(merged_data)
+```
+
+Just to check if we have the same number of countries and their names in both datasets.
+
+```{r}
+length(unique(second_clean_data$country))
+length(unique(merged_data$country))
+unique(second_clean_data$country)
+unique(merged_data$country)
+
+```
+
+# Prepare the data: NAs, scales, etc
+
+First, we want to see how many NAs we have:
+
+```{r}
+# NAs
+na_count <- sapply(merged_data, function(x) sum(is.na(x)))
+
+# NAs percentage: is it low or high
+na_percentage <- sapply(merged_data, function(x) mean(is.na(x)) * 100)
+
+na_summary <- data.frame(NA_Count = na_count, NA_Percentage = na_percentage)
+print(na_summary)
+
+
+```
+
+In general we have variables with low levels of NA (generally between 0 and 8%), but there are some exceptions. First, we are surprised that for question QC9 50% are NAs, so we eliminate this variable altogether.
+
+```{r}
+merged_data <- merged_data %>%
+  select(-qc9_4, -qc9_5, -qc9_10, -qc9_11)
+
+```
+
+
+Now we want to impute those variables with more than 8% of NAs.
+
+Since individual and aggregate variables have different distributions or represent different levels of information, it's best to first test which imputation method is best for the individual variables and which for the aggregate variables.
+
+For the individual level we choose the method that best fits the original distribution (between Random Forest, Lasso and Cart):
+
+```{r}
+library(mice)
+library(ggplot2)
+
+selected_vars <- c("qc12_12", "qc6_11")
+
+# Imputation methods
+methods <- c("lasso.norm", "rf", "cart")  
+
+# Apply them
+imputations <- lapply(methods, function(m) {
+  complete(mice(merged_data[selected_vars], m=5, method=m, seed=123))$qc12_12
+})
+
+# Dataframe with original and imputated values
+mice_imputed <- data.frame(
+  original = merged_data$qc6_11,
+  imputed_lasso = imputations[[1]],
+  imputed_rf = imputations[[2]],
+  imputed_cart = imputations[[3]]
+)
+
+# We visualize it in a plot
+variables <- c("original", "imputed_lasso", "imputed_rf", "imputed_cart")
+titles <- c("Original", "LASSO Imputed", "Random Forest Imputed", "CART Imputed")
+colors_fill <- c("skyblue", "#15ad4f", "#6a6ad9", "#e65100")
+
+mice_imputed_long <- mice_imputed %>%
+  pivot_longer(all_of(variables), names_to = "method", values_to = "value")
+
+# Graph
+plots <- ggplot(mice_imputed_long, aes(x = value, fill = method)) +
+  geom_histogram(binwidth = 1, color = "gray30", position = "identity", alpha = 0.6) +
+  facet_wrap(~method, scales = "free_y", labeller = labeller(method = setNames(titles, variables))) +
+  scale_fill_manual(values = colors_fill) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+# Show the graph
+print(plots)
+
+```
+
+We don't see any major differences between the three types of imputation methods, since the estimates for all three are similar and differ in the same way from the original distribution. To decide on a method, we'll first look at which method is most appropriate for the remaining (country-level) variables:
+
+
+```{r}
+selected_vars <- c("religious_importance", "quality_of_democracy")
+
+# Apply imputation
+imputations <- lapply(methods, function(m) {
+  complete(mice(merged_data[selected_vars], m=5, method=m, seed=123))$religious_importance
+})
+
+# Create dataframe con original and imputed values
+mice_imputed <- data.frame(
+  original = merged_data$religious_importance,
+  imputed_lasso = imputations[[1]],
+  imputed_rf = imputations[[2]],
+  imputed_cart = imputations[[3]]
+)
+
+# Variables to plot
+variables <- c("original", "imputed_lasso", "imputed_rf", "imputed_cart")
+titles <- c("Original", "LASSO Imputed", "Random Forest Imputed", "CART Imputed")
+colors_fill <- c("skyblue", "#15ad4f", "#6a6ad9", "#e65100")
+
+# Transform data to long format for ggplot
+mice_imputed_long <- mice_imputed %>%
+  pivot_longer(all_of(variables), names_to = "method", values_to = "value")
+
+# Create distribution chart
+plots <- ggplot(mice_imputed_long, aes(x = value, fill = method)) +
+  geom_histogram(binwidth = 1, color = "gray30", position = "identity", alpha = 0.6) +
+  facet_wrap(~method, scales = "free_y", labeller = labeller(method = setNames(titles, variables))) +
+  scale_fill_manual(values = colors_fill) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+# Show the plot
+print(plots)
+
+```
+
+Based on these observations, LASSO in an excellent choice for the imputation in country-level variables. Random Forest and Cart, on the other hand, are shifted to the left and are not as good. Lasso is the closest to the original distribution so we use it. And since we had some doubts about which method to choose for the variables at an individual level, we decided to also choose Lasso and apply it to everything.
+
+We apply the imputation to the variables that need it:
+
+((Although our dependent variable has 11% NAs, we are not going to impute it since there is a lot of discussion in the literature about applying it or not so for now we keep it as the original))
+
+```{r}
+#Variables that we want to impute
+library (mice)
+selected_vars <- c("qc6_11", "qc12_12", "qc13_11", "qc13_12", 
+                   names(merged_data)[which(names(merged_data) == "gender_gap_index"):
+                                      which(names(merged_data) == "quality_of_democracy")])
+
+# Apply RF
+m <- 4  
+mice_mod <- mice(merged_data[selected_vars], m=m, method='lasso.norm', seed=123)
+
+merged_data[selected_vars] <- complete(mice_mod, action=m)
+
+```
+
+# Descriptive analysis
+
+We want to see the distribution of the dependent variable across countries:
+
+```{r}
+table(merged_data$qc19)
+
+#0 for No and 1 for Yes
+merged_data$qc19 <- ifelse(merged_data$qc19 == 2, 0, merged_data$qc19)
+merged_data$qc19_label <- factor(merged_data$qc19, levels = c(0, 1), labels = c("No", "Yes"))
+
+qc19_percentages <- merged_data %>%
+  group_by(isocntry, qc19_label) %>%
+  summarise(count = n()) %>%
+  group_by(isocntry) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Plot
+
+ggplot(qc19_percentages, aes(x = factor(isocntry), y = percentage, fill = qc19_label)) +
+  geom_bar(stat = "identity", position = "stack", color = "gray90") + 
+  scale_fill_manual(values = c("No" = "red", "Yes" = "#15ad4f")) +
+  labs(
+    title = "Support for Gender Identity Change in Civil Documents",
+    subtitle = "Percentage of 'Yes' and 'No' Responses by Country",
+    fill = "Responses",
+    x = "Country", 
+    y = "Percentage"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA), 
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray25"),
+    legend.position = "right"
+  )
+
+```
+
+
+This stacked bar chart illustrates the distribution of opinions regarding gender identity change in civil documents across various countries, categorizing responses as "Yes" (for), "No" (against), and "NA" (not available). The visualization allows for cross-country comparisons, highlighting variations in support levels, opposition, and the extent of missing opinion data. Notably, Spain, the Netherlands, Malta or France display very strong support for gender identity change. On the other hand, Hungary, Romania or Slovakia show a bigger percentage of “no”. 
+ Analyzing these trends could reveal potential correlations with regional dynamics or socioeconomic factors influencing public sentiment on this issue.
+
+
+## Plot for the distribution of the dependent variable across European countries
+
+```{r}
+# Filter for "Yes" responses and select the relevant columns
+yes_percentages <- qc19_percentages %>%
+  filter(qc19_label == "Yes") %>%
+  select(isocntry, percentage)
+
+# Now yes_percentages contains the country and the percentage of "Yes" responses
+print(yes_percentages)
+```
+
+```{r}
+# Define the mapping table
+country_name_map <- data.frame(
+  isocntry = c("AT", "BE", "BG", "HR", "DK", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "NL", "PL", "PT", "ES", "SE", "GB", "CZ", "RO", "SK", "LT", "LV", "EE", "SI", "CY", "LU", "MT"), # ISO codes
+  map_name = c(
+    "Austria", "Belgium", "Bulgaria", "Croatia", "Denmark", "Finland",
+    "France", "Germany", "Greece", "Hungary", "Ireland", "Italy",
+    "Netherlands", "Poland", "Portugal", "Spain", "Sweden", "UK",
+    "Czech Republic", "Romania", "Slovakia", "Lithuania", "Latvia", "Estonia",
+    "Slovenia", "Cyprus", "Luxembourg", "Malta"
+  )
+)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(mapdata)
+
+# Get the map data for Europe
+europe_map <- map_data("world", region = unique(country_name_map$map_name))
+
+# Merge the map data with the mapping table
+europe_data <- europe_map %>%
+  left_join(country_name_map, by = c("region" = "map_name")) %>%
+  left_join(yes_percentages, by = "isocntry")
+
+# Inspect the result
+head(europe_data)
+```
+
+```{r}
+ggplot(data = europe_data) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = percentage), 
+               color = "gray90", linewidth = 0.1) +  # Lighter country borders
+  scale_fill_viridis_c(
+    option = "viridis", direction = -1,  # Choose a different palette
+    name = "Support (%)",  
+    na.value = "lightgray"  # Color for missing values
+  ) +
+  labs(
+    title = "Support for Gender Identity Change\nin Civil Documents",
+    subtitle = "Percentage of 'Yes' responses by Country"
+  ) +
+  coord_quickmap() +  # Maintain aspect ratio for maps
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    panel.background = element_rect(fill = "white"),  # Clean white background
+    panel.grid.major = element_blank(),  # Remove major grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.3),  # Customize title
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray25"),  # Customize subtitle
+    legend.title = element_text(size = 10),  # Customize legend title
+    axis.title.x = element_blank(),  # Remove x-axis label
+    axis.title.y = element_blank(),  # Remove y-axis label
+    axis.text.x = element_blank(),  # Remove x-axis text (numbers)
+    axis.text.y = element_blank()  # Remove y-axis text (numbers)
+  )
+```
+
+This map visualizes the level of support for gender identity change in civil documents across Europe, using color intensity to represent the percentage of "Yes" responses by country. Darker shades of purple and blue indicate higher support (60-80%), prevalent in Western and Northern Europe, while lighter shades of green and yellow, indicating lower support (20-40%), are concentrated in Eastern and Southeastern Europe. This geographical pattern suggests potential regional disparities in societal attitudes towards gender identity, possibly influenced by cultural, historical, or political factors.
+
+### Map in plotly
+
+```{r}
+library(plotly)
+library(dplyr)
+
+# Summarize the data for Plotly
+europe_data_summary <- europe_data %>%
+  group_by(region) %>%
+  summarize(
+    percentage = mean(percentage, na.rm = TRUE),  # Calculate mean percentage
+    lat = mean(lat, na.rm = TRUE),  # Center latitude for each country
+    long = mean(long, na.rm = TRUE)  # Center longitude for each country
+  )
+
+# Create the Plotly map
+plot_ly(
+  data = europe_data_summary,
+  type = "choropleth",
+  locations = ~region,  # Country names
+  locationmode = "country names",  # Use country names for mapping
+  z = ~percentage,  # Values to color by
+  colorscale = "Viridis",  # Use the Viridis color palette
+  reversescale = TRUE,  # Reverse the color scale
+  colorbar = list(title = "Percentage of respondents supporting \ngender identity change"),
+  hoverinfo = "text",
+  text = ~paste(region, "<br>Percentage:", round(percentage, 2), "%")  # Hover text
+) %>%
+  layout(
+    title = list(
+      text = "Support for Gender Identity Change in Civil Documents",
+      x = 0.5,  # Center the title
+      font = list(size = 16, face = "bold")
+    ),
+    geo = list(
+      scope = "europe",  # Focus on Europe
+      showframe = FALSE,  # Hide the map frame
+      showcoastlines = TRUE,  # Show coastlines
+      projection = list(type = "mercator")  # Use Mercator projection
+    ),
+    margin = list(l = 0, r = 0, t = 50, b = 0)  # Adjust margins
+  )
+
+```
+
+Recreating this map in Plotly and making it interactive would significantly enhance its utility and user engagement. By transforming the static map into an interactive visualization, viewers can check individual countries to see the exact percentage of support for gender identity change, rather than relying solely on broad color categories. This interactive map not only makes the data more accessible and engaging but also empowers users to explore the information in a personalized and informative manner with the proper percentage.
+
+# First analysis:  Explaining Cross-Country Differences in Support Levels
+
+## Select relevant variables
+
+We are going to use Random Forest to select the most relevant variables:
+
+With RF, subsets of variables are randomly selected in each tree, reducing the impact of collinearity and thus evaluating the importance of each variable, discarding the least relevant ones.
+
+```{r}
+
+library(randomForest)
+
+# Convert qc19 into factor so Random Forest can treat it as a categorical variable
+
+merged_data$qc19 <- factor(merged_data$qc19)
+
+# Use Random Forest to select relevant variables Usar 
+colnames(merged_data) <- make.names(colnames(merged_data))
+rf_model <- randomForest(qc19 ~ ., data = merged_data, importance = TRUE, na.action = na.omit)
+
+# See the most important variables
+importance(rf_model)
+
+```
+
+The higher the value of MeanDecreaseAccuracy, the more important the variable is. The higher the value of MeanDecreaseGini, the more useful the variable is for making splits in the trees of the Random Forest model.
+
+
+```{r}
+# Get the importance of the variables
+var_imp <- importance(rf_model)
+
+# Convert to data frame and sort by MeanDecreaseAccuracy from largest to smallest
+var_imp_df <- as.data.frame(var_imp) %>%
+  arrange(desc(MeanDecreaseAccuracy))
+
+# See the firts rows
+var_imp_df
+
+```
+
+
+The variables relevant at the individual level are: qc15_1, qc15_3, qc6_10 , qc17_5, qc15_2, qc12_12, etc. At the aggregate level we have : fundamental_rights, quality_of_democracy, social_globalisation, gdp_per_capita_usd, No.compulsory.medical.intervention.required, gender_gap_index, etc.
+
+We will take **more variables at the aggregate level** than at the individual level since we are more interested in the aggregate part to see the differences between countries. 
+
+## Multilevel regression
+
+Now that we have the most relevant variables we perform our **multilevel regression** with 15 variables:
+
+First we had to check again that all variables are in the correct scale or good categorized (which we already did at the beginning when we prepared the data)
+
+All the variables we take are either on a scale or categorized as dummies by default (0-1). So we have to **scale the numeric variables that have vary diverse scales** (and not the dummies):
+
+```{r}
+merged_data$qc19 <- as.numeric(as.character(merged_data$qc19))
+
+# Scale numeric variables
+vars_a_escalar <- c("qc15_1", "qc15_3", "qc6_10", "qc17_5", "qc15_2",
+                    "qc12_12", "qc13_11", "qc12_11", "qc13_12", "qc12_10",
+                    "social_globalisation", "fundamental_rights", "gdp_per_capita_usd", 
+                    "quality_of_democracy", "gender_gap_index", "eu_unemployment_female", "eu_unemployment_male", "religious_importance", "d11", "d8" )
+dummies <- c ("No.compulsory.medical.intervention.required", "Conversion.practices.ban..gender.identity.", "Education..gender.identity.", "Goods...services..gender.identity.") #we keep them in the original scale
+
+# Scale the selected variables
+merged_data[vars_a_escalar] <- scale(merged_data[vars_a_escalar])
+```
+
+We perform the model:
+
+```{r}
+#Model
+library(lme4)
+library(nlme)
+library(lmerTest)
+
+
+modelo_multinivel <- glmer(qc19 ~ qc15_3 + qc13_12 + qc17_5 + qc12_12 + d11 + d8 + 
+                           fundamental_rights + quality_of_democracy + 
+                           social_globalisation + religious_importance + 
+                           Conversion.practices.ban..gender.identity. + 
+                           gdp_per_capita_usd + eu_unemployment_female + 
+                           eu_unemployment_male + No.compulsory.medical.intervention.required + 
+                           (1 | isocntry), 
+                           data = merged_data, 
+                           family = binomial(link = "logit"))
+
+summary(modelo_multinivel)
+
+```
+
+## Interpretation
+
+To compare how the odds ratios change, we must exponentiate the coefficients in with exp():
+
+```{r}
+exp(fixef(modelo_multinivel))
+
+```
+We plot it to see the same coefficients associated with their corresponding variables and significances:
+
+```{r}
+library(sjPlot)
+
+plot_model(modelo_multinivel, show.values = TRUE, value.offset = .3, title = "Coefficients and significance of the variables in the multilevel model")
+
+```
+
+
+In summary, all the individual variables are significative, specially the individuals ones, since they were also related to opinions about LGBT people. However, what more interest us are the variables at the aggregate level so that we can focus on the differences between countries. 
+
+Regarding the **individual variables**, we see, ceteris paribus, that the variables that positively influence being in favor of changing gender identity in documents are: also agreeing with same-sex marriage, being comfortable with your children being intersex, feeling comfortable if a colleague at your workplace is intersex, being in favor of schools including information about intersex people, and being younger. However, the problem with the individual variables related to LGBT issues is that there may be **cases of endogeneity and reverse causality** that we cannot control for here: for example, being in favor of schools including information about intersex people may influence being in favor of changing gender identity, but the reverse can also occur. And this is something we cannot know with this model, which is a limitation.
+
+Taking into account the significant variables at the **aggregate level** and controlling for the rest of the variables, we see that in countries where gender identity conversion practices are banned, there is a significant  probability that gender identity change will be supported on documents: it's is 92% more likely to be accepted in countries where it is banned than where it is not. This can be explained by the fact that bans can raise awareness about gender identity among the population.In countries where no compulsory medical intervention is required, gender identity changes on official documents are more likely to be supported (55% more). This may be explained by the fact that, in the absence of mandatory medical interventions, legal recognition of gender identity is based more on self-determination than on medical requirements, which encourages a more inclusive and flexible stance regarding gender changes on official documents.
+
+
+
+# Second analysis: Developing a Predictive Model for Other Countries
+
+## Train and test 
+
+We divide the data in training and test: the training set data is used to train the model and then we evaluate its performance with unseen data (test set), ensuring a more realistic assessment of the model generalization capacity
+
+```{r}
+set.seed(123)  # We set the seed for reproducibility
+library(caret)  # Caret to divide the dataset
+
+merged_data <- merged_data[!is.na(merged_data$qc19), ]  # Removes rows with NA in qc19
+
+train_index <- createDataPartition(merged_data$qc19, p = 0.8, list = FALSE)
+
+train_data <- merged_data[train_index, ]
+test_data <- merged_data[-train_index, ]
+
+
+```
+
+## Select relevant variables
+
+Selection of relevant variables with Lasso:
+
+```{r}
+library(glmnet)
+library(lme4)
+
+# Remove rows with missing values in X_train and y_train
+train_data_no_na <- na.omit(train_data)
+
+# Separate the predictor variables (X) and the target variable (y).
+X_train_no_na <- train_data_no_na[, setdiff(names(train_data_no_na), "qc19")]
+y_train_no_na <- train_data_no_na$qc19
+
+# Adjust Lasso model
+lasso_model <- glmnet(as.matrix(X_train_no_na), y_train_no_na, alpha = 1, family = "binomial")
+
+coef(lasso_model)
+
+
+```
+
+The LASSO model helps us pick the most important factors influencing opinions on gender identity change. It is like a filter that throws out the less useful factors, leaving us with a smaller, more focused list (by shrinking some coefficients to zero). The table shows how the importance of each factor changes as we tighten the filter.
+Factors that remain relevant even when the filter is tightest (like d10, d8, d60 and quality_of_democracy and then gdp_per_capita_usd and social_globalisation) are the most influential in shaping opinions. These factors are the best predictors and need to be tested for stability so this is why we keep them.
+
+
+
+## Predictive model
+
+First we scale those variables that aren't scaled yet, so we can compare coefficients:
+
+
+```{r}
+
+vars_a_escalar <- c("sd1_4", "d10", "d60")
+
+merged_data[vars_a_escalar] <- scale(merged_data[vars_a_escalar])
+
+```
+
+
+```{r}
+
+# Fitting the multilevel model with the selected variables
+modelo_multinivel2 <- glmer(qc19 ~ sd1_4 + d10 + d8 + d60 + quality_of_democracy +
+                            gdp_per_capita_usd + social_globalisation + (1 | isocntry), 
+                           data = train_data, 
+                           family = binomial(link = "logit"))
+
+
+# See the summary of the model
+summary(modelo_multinivel2)
+
+
+```
+
+Before interpreting the coefficients, we check multicollinearity: 
+
+```{r}
+library(car)
+vif(modelo_multinivel2)
+
+```
+
+These Variance Inflation Factor (VIF) values indicate the level of multicollinearity among the predictor variables in your model. A VIF of 1 suggests no multicollinearity, while values greater than 1 indicate increasing levels of correlation. Based on these results, quality_of_democracy has a VIF of 1.55, and gdp_per_capita_usd has a VIF of 2.38, suggesting that these two variables have moderate colinearity. Similarly, social_globalisation is the highest one, with 2.80, but it is still not extremely high. All the other variables are negligibly low, close to 1. There is no significant multicollinearity because the VIF values are less than 5, indicating that the independent variables are not highly correlated with each other. This implies that the coefficients of the model are stable and the estimates of the effects of each variable are reliable. So our results are solid.
+
+## Interpretation
+
+To compare how the odds ratios change, we must exponentiate the coefficients in with exp():
+
+```{r}
+exp(fixef(modelo_multinivel2))
+
+```
+
+We can plot it to see more clear which variables affect the dependent positively or negatively: 
+
+```{r}
+
+library(sjPlot)
+
+plot_model(modelo_multinivel2, show.values = TRUE, value.offset = .3, title = "Coefficients and significance of the variables in the multilevel model")
+
+```
+
+This generalized linear mixed model (GLMM) predicts qc19 using a combination of individual and country-level predictors, while accounting for clustering within countries using a random intercept for isocntry.
+
+Controlling all the variables, we can see the following in the significant variables:  
+People who do not have LGB friends are approximately 65% less likely to support transgender people compared to those who do not have gay friends. Being female rather than male increases the odds of supporting gender identity change by 43%. Furthermore, among those with higher incomes (who have less difficulty paying bills), the odds of supporting gender identity changes increase by 43%. Finally, a country's GDP per capita increase in USD per unit increases the odds of supporting gender identity change measures by 20%.
+The quality of democracy and social globalization variables do not significantly influence the dependent variable.
+
+We plot our results to make it more easy to visualize:
+
+```{r}
+library(ggeffects)
+
+gg.pred = ggpredict(modelo_multinivel2, terms = c("gdp_per_capita_usd", "d10", "d60"), ci_level=NA)
+
+plot(gg.pred) +
+  labs(
+    title = "Predicted Probabilities of Supporting Gender Identity Change",  
+    subtitle = "Based on gender, difficulty paying bills and GDP",
+    x = "GDP per capita (scaled)",  
+    y = "Probability of Support" 
+  ) +
+  scale_color_manual(values = c("Man" = "blue", "Woman" = "red")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5), 
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray25"), 
+    axis.title.x = element_text(size = 12),  
+    axis.title.y = element_text(size = 12), 
+    axis.text.x = element_text(size = 10),  
+    axis.text.y = element_text(size = 10),  
+    legend.position = "right", 
+    legend.title = element_text(size = 10),  
+    legend.text = element_text(size = 10)  
+  )
+
+```
+
+Here we can see what we've already interpreted: as the GDP per capita (USD) in a country increases, support for changing gender identity also increases. Furthermore we can see another pattern: men are less supportive than women. Finally, we see that the fewer difficulties there are in paying bills, the more support there is for this measure.
+
+Similarly, we can see that as GDP increases, support for gender change measures increases.
+
+## Evaluate model 
+
+Predictions:
+
+```{r}
+
+# Make predictions on the test set
+predicciones <- predict(modelo_multinivel2, newdata = test_data, type = "response")
+
+
+predicciones_clase <- ifelse(predicciones > 0.5, 1, 0)
+
+```
+
+Model evaluation - confusion matrix:
+
+```{r}
+
+cm <- confusionMatrix(as.factor(predicciones_clase), as.factor(test_data$qc19))
+
+# See the summary of confusion matrix
+cm
+
+# Precision, Recall, y F1-Score
+precision <- cm$byClass["Pos Pred Value"]  # Precision
+recall <- cm$byClass["Sensitivity"]        # Recall
+f1_score <- cm$byClass["F1"]               # F1-Score
+
+# print the results
+cat("Precision:", precision, "\n")
+cat("Sensitivity:", recall, "\n")
+cat("F1-Score:", f1_score, "\n")
+
+```
+
+The model has an accuracy of 71%, correctly predicting support (1) or no support (0) 71% of the time. Its sensitivity is 59%, meaning it correctly identifies 59% of those who support gender identity change (1). The specificity is 80%, meaning it correctly identifies 80% of those who do not support it (0). Overall, the model is better at predicting non-supporters than supporters. Improving sensitivity could help the model more accurately predict those who support gender identity change. The F1-Score of 0.62 indicates a moderate balance between precision and recall, showing decent overall performance with room for improvement in identifying supporters.
+
+**Model evaluation - ROC curve:**
+
+```{r}
+
+library(pROC)
+roc_curve <- roc(test_data$qc19, predicciones)
+plot(roc_curve)
+auc(roc_curve)
+
+```
+
+
+The area under the curve of 0.7734 indicates that the model has good predictive ability. A value close to 0.5 means the model does not distinguish between classes (equivalent to chance), while a value close to 1 indicates excellent predictive ability.
+
+
+
+
+
+
+
+
